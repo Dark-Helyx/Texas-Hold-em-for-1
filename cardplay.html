@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Texas Hold'em Poker</title>
+<style>
+  body {background:#0b3d0b;color:white;font-family:Arial;text-align:center;margin:0;padding:0;}
+  h1{margin:20px 0;}
+  .table {margin:40px auto;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle at center,#006400 40%,#004d00 100%);position:relative;box-shadow:0 0 40px rgba(0,0,0,0.6);}
+  .seat{position:absolute;width:120px;text-align:center;}
+  .seat .chips{margin-top:5px;font-size:14px;}
+  .seat .cards{margin-top:5px;font-size:28px;}
+  .seat1 { top:-20px; left:50%; transform:translateX(-50%);}
+  .seat2 { top:100px; right:-40px;}
+  .seat3 { bottom:200px; right:-40px;}
+  .seat4 { bottom:-20px; left:50%; transform:translateX(-50%);}
+  .seat5 { bottom:200px; left:-40px;}
+  .seat6 { top:100px; left:-40px;}
+  .community{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:10px;font-size:40px;}
+  .chips-circle{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;color:gold;}
+  button {margin-top: 20px;padding:10px 20px;font-size:16px;}
+</style>
+</head>
+<body>
+<h1>Texas Hold'em Poker</h1>
+
+<div class="table">
+  <div class="seat seat1"><div>Player</div><div class="cards" id="playerCards">🂠 🂠</div><div class="chips" id="playerChips">1000</div></div>
+  <div class="seat seat2"><div>Bot 1</div><div class="cards" id="bot1Cards">🂠 🂠</div><div class="chips" id="bot1Chips">1000</div></div>
+  <div class="seat seat3"><div>Bot 2</div><div class="cards" id="bot2Cards">🂠 🂠</div><div class="chips" id="bot2Chips">1000</div></div>
+  <div class="seat seat4"><div>Bot 3</div><div class="cards" id="bot3Cards">🂠 🂠</div><div class="chips" id="bot3Chips">1000</div></div>
+  <div class="seat seat5"><div>Bot 4</div><div class="cards" id="bot4Cards">🂠 🂠</div><div class="chips" id="bot4Chips">1000</div></div>
+  <div class="seat seat6"><div>Bot 5</div><div class="cards" id="bot5Cards">🂠 🂠</div><div class="chips" id="bot5Chips">1000</div></div>
+  <div class="community" id="communityCards">🂠 🂠 🂠 🂠 🂠</div>
+  <div class="chips-circle" id="pot">Pot: 300</div>
+</div>
+
+<button onclick="dealHand()">Deal Hand</button>
+<div id="winner" style="margin-top:20px;font-size:18px;"></div>
+
+<script>
+const suits = ['♠','♥','♦','♣'];
+const ranks = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+let playerChips=1000, botChips=[1000,1000,1000,1000,1000];
+
+function shuffleDeck() {
+  const deck = [];
+  for(let s of suits) {
+    for(let r of ranks) deck.push(r+s);
+  }
+  for(let i=deck.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [deck[i],deck[j]]=[deck[j],deck[i]];
+  }
+  return deck;
+}
+
+function dealHand() {
+  let deck=shuffleDeck();
+  const hands = [];
+  for(let i=0;i<6;i++){
+    hands.push([deck.pop(), deck.pop()]);
+  }
+  const community = [deck.pop(), deck.pop(), deck.pop(), deck.pop(), deck.pop()];
+
+  // Show player cards face-up, bots face-down
+  document.getElementById('playerCards').textContent = hands[0].join(' ');
+  for(let i=1;i<6;i++){
+    document.getElementById(`bot${i}Cards`).textContent = '🂠 🂠';
+  }
+  document.getElementById('communityCards').textContent = community.join(' ');
+
+  // Pot
+  const potAmount = 300;
+  document.getElementById('pot').textContent = `Pot: ${potAmount}`;
+
+  // Determine winner (simplified: random winner for now)
+  const winnerIndex = Math.floor(Math.random()*6);
+  let winnerName = winnerIndex===0?'Player':`Bot ${winnerIndex}`;
+  document.getElementById('winner').textContent = `${winnerName} wins this hand!`;
+
+  // Update chips
+  if(winnerIndex===0) playerChips+=potAmount;
+  else botChips[winnerIndex-1]+=potAmount;
+
+  document.getElementById('playerChips').textContent = playerChips;
+  for(let i=1;i<6;i++){
+    document.getElementById(`bot${i}Chips`).textContent = botChips[i-1];
+  }
+}
+</script>
+</body>
+</html>
