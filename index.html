@@ -1,601 +1,169 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Texas Hold’em — Bots + Full Flow</title>
+<meta charset="UTF-8">
+<title>Texas Hold'em First-Person</title>
 <style>
-  :root{
-    --felt:#0a5a3a; --felt-dark:#084f33; --panel:#ffffff; --ink:#0b0b0b; --muted:#6b7280;
-    --accent:#2ecc71; --warn:#ef4444; --gold:#facc15;
-  }
-  html,body{height:100%}
-  body{margin:0;background:#052e22;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial}
-  header{padding:14px 18px;background:linear-gradient(90deg,#0c7a52,#119d6b);box-shadow:0 4px 18px rgba(0,0,0,.25)}
-  header h1{margin:0;font-size:18px}
-  main{display:grid;grid-template-columns:340px 1fr 320px;gap:14px;align-items:start;padding:14px}
-  @media (max-width:1100px){ main{grid-template-columns:1fr;}}
-  .card{background:#fff;color:#111;border-radius:14px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
-  label{font-weight:600;display:block;margin:8px 0 4px}
-  input[type=number],select,input[type=text]{width:100%;padding:8px;border:1px solid #ddd;border-radius:8px}
-  button{cursor:pointer;border:none;border-radius:10px;padding:10px 14px;font-weight:700;background:var(--accent);color:#003314}
-  button.secondary{background:#e5e7eb;color:#111}
-  button.danger{background:var(--warn);color:#fff}
-  button:disabled{opacity:.5;cursor:not-allowed}
-  .row{display:flex;gap:8px;flex-wrap:wrap}
-  .muted{color:var(--muted)}
-  .chip{background:var(--gold);color:#3a2c00;border-radius:999px;padding:4px 8px;font-weight:800}
-  /* Table */
-  #tableWrap{position:relative;min-height:620px}
-  #table{
-    position:relative;margin:0 auto;width:740px;height:520px;border-radius:250px/180px;
-    background:radial-gradient(ellipse at center, var(--felt) 0%, var(--felt-dark) 70%);
-    box-shadow:0 30px 70px rgba(0,0,0,.45) inset,0 8px 24px rgba(0,0,0,.35);
-  }
-  @media (max-width:800px){#table{width:94vw;height:62vw;border-radius:45vw/31vw}}
-  .centerHud{
-    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;
-  }
-  #community{display:flex;gap:8px;justify-content:center;margin-bottom:8px}
-  .cardface{
-    display:inline-flex;align-items:center;justify-content:center;
-    width:48px;height:64px;border-radius:6px;background:#fff;color:#111;font-weight:800;border:1px solid #e6e6e6;
-  }
-  .red{color:#c1121f}
-  #potBox{font-size:14px;margin-top:6px}
-  /* Seats */
-  #seats{position:absolute;inset:0}
-  .seat{
-    position:absolute;width:160px;transform:translate(-50%,-50%);
-    text-align:center;color:#fff;
-  }
-  .seatBox{
-    background:rgba(0,0,0,.25);backdrop-filter:blur(2px);border:1px solid rgba(255,255,255,.08);
-    border-radius:12px;padding:6px 8px;
-  }
-  .seat .name{font-weight:800}
-  .seat .stack{font-size:13px;color:#e5e7eb}
-  .seat .cards{margin-top:6px}
-  .hole .cardface{width:44px;height:58px}
-  .back{background:repeating-linear-gradient(45deg,#1b2a41 0,#1b2a41 6px,#2a3c5b 6px,#2a3c5b 12px);color:transparent;border-color:#2a3c5b}
-  .dealerBadge{display:inline-block;margin-left:6px;background:#fff;color:#111;border-radius:50%;width:18px;height:18px;line-height:18px;font-size:12px;font-weight:900}
-  /* Turn marker */
-  .arrow{
-    position:absolute;left:50%;top:50%;transform:translate(-50%,-110%); /* sits above the seat box */
-    width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:14px solid #fff;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));display:none;
-  }
-  .seat.active .arrow{display:block}
-  /* Controls & log */
-  #controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
-  #log{max-height:240px;overflow:auto;background:#0e1218;color:#e5e7eb;border-radius:10px;padding:8px;font-size:13px}
-  #toActText{font-weight:800}
-  /* small helpers */
-  .k{font-weight:800}
+  body { margin:0; background:#0a5; font-family:sans-serif; }
+  canvas { display:block; margin:0 auto; background:#0a5; }
+  #menu { text-align:center; padding:20px; color:white; }
+  select, input { margin:5px; }
+  button { margin-top:10px; padding:10px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>Texas Hold’em — Single-File Edition (Bots + Betting + Arrow Turn Marker)</h1>
-</header>
 
-<main>
-  <!-- Setup -->
-  <section class="card" id="setup">
-    <h3>Table Setup</h3>
-    <label>Player name</label>
-    <input id="playerName" type="text" value="You">
-    <div class="row">
-      <div style="flex:1">
-        <label>Buy-in (starting chips)</label>
-        <input id="buyin" type="number" min="50" value="1000">
-      </div>
-      <div style="flex:1">
-        <label>Small blind</label>
-        <input id="sb" type="number" min="1" value="10">
-      </div>
-      <div style="flex:1">
-        <label>Big blind</label>
-        <input id="bb" type="number" min="2" value="20">
-      </div>
-    </div>
-    <div class="row" style="margin-top:6px">
-      <div style="flex:1">
-        <label>Number of bots (1–7)</label>
-        <input id="botCount" type="number" min="1" max="7" value="4">
-      </div>
-      <div style="flex:1">
-        <label>Update bot difficulties</label>
-        <button class="secondary" id="updateBots">Update</button>
-      </div>
-    </div>
-    <div id="botDiffs" class="muted" style="margin-top:8px">Click “Update” after changing the bot count.</div>
-    <div class="row" style="margin-top:10px">
-      <button id="start">Start Game</button>
-      <button id="nextHand" class="secondary">Next Hand</button>
-      <button id="reset" class="danger">Reset</button>
-    </div>
-    <hr style="margin:12px -12px 8px;border:none;border-top:1px solid #eee">
-    <div id="controls" class="muted">
-      <div><span class="k">Your action:</span></div>
-      <button id="btnFold" disabled>Fold</button>
-      <button id="btnCall" disabled>Call</button>
-      <button id="btnRaise" disabled>Raise</button>
-      <input id="raiseAmt" type="number" min="1" value="50" style="width:100px">
-    </div>
-    <div style="margin-top:8px"><span class="muted">To act:</span> <span id="toActText">—</span></div>
-    <div style="margin-top:8px">
-      <label class="muted">Hand Log</label>
-      <div id="log"></div>
-    </div>
-  </section>
+<div id="menu">
+  <h2>Texas Hold'em Setup</h2>
+  <label>Bots: <input type="number" id="botCount" min="1" max="5" value="3"></label><br>
+  <label>Buy-in: <input type="number" id="buyIn" value="1000"></label><br>
+  <label>Small Blind: <input type="number" id="smallBlind" value="10"></label><br>
+  <label>Big Blind: <input type="number" id="bigBlind" value="20"></label><br>
+  <div id="botDifficulties"></div>
+  <button onclick="startGame()">Start Game</button>
+</div>
 
-  <!-- Table -->
-  <section class="card" id="tableWrap">
-    <div id="table">
-      <div id="seats"></div>
-      <div class="centerHud">
-        <div id="community"></div>
-        <div id="potBox"><span class="muted">Pot:</span> <span class="chip" id="pot">0</span></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Reference & Help -->
-  <section class="card">
-    <h3>Poker Hands (high → low)</h3>
-    <ol style="margin:6px 0 10px 18px">
-      <li>Royal Flush</li>
-      <li>Straight Flush</li>
-      <li>Four of a Kind</li>
-      <li>Full House</li>
-      <li>Flush</li>
-      <li>Straight</li>
-      <li>Three of a Kind</li>
-      <li>Two Pair</li>
-      <li>One Pair</li>
-      <li>High Card</li>
-    </ol>
-    <p class="muted" style="font-size:13px">Hard bots occasionally bluff; side pots simplified for v1.</p>
-  </section>
-</main>
+<canvas id="tableCanvas" width="900" height="600" style="display:none;"></canvas>
 
 <script>
-/* =========================
-   Card utils & evaluator
-   ========================= */
-const RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
-const SUITS = ['♠','♥','♦','♣'];
-
-function mkDeck(){
-  const d=[]; for(const r of RANKS) for(const s of SUITS) d.push(r+s);
-  return d;
-}
-function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.random()* (i+1) | 0; [a[i],a[j]]=[a[j],a[i]]; } }
-function rankIndex(card){ const r = card.slice(0, card.length-1); return RANKS.indexOf(r); }
-function suitOf(card){ return card.slice(-1); }
-
-function kComb(arr,k){
-  const res=[], cur=[];
-  (function go(start){
-    if(cur.length===k){ res.push(cur.slice()); return; }
-    for(let i=start;i<arr.length;i++){ cur.push(arr[i]); go(i+1); cur.pop(); }
-  })(0);
-  return res;
-}
-function cmpTuple(a,b){ for(let i=0;i<a.length;i++){ if(a[i]!==b[i]) return a[i]-b[i]; } return 0; }
-
-/* rank 5-card hand; returns comparable tuple and name */
-function rank5(cards){
-  const ranks = cards.map(rankIndex).sort((a,b)=>a-b);
-  const suits = cards.map(suitOf);
-  const isFlush = suits.every(s=>s===suits[0]);
-
-  // straight?
-  let uniq = [...new Set(ranks)].sort((a,b)=>a-b);
-  let isStraight=false, highStraight=-1;
-  if(uniq.length===5){
-    if(uniq[4]-uniq[0]===4){ isStraight=true; highStraight=uniq[4]; }
-    // wheel A-2-3-4-5
-    if(JSON.stringify(uniq)==='[0,1,2,3,12]'){ isStraight=true; highStraight=3; }
-  }
-
-  const count = {}; ranks.forEach(r=>count[r]=(count[r]||0)+1);
-  const byCount = Object.entries(count).map(([r,c])=>({r:+r,c})).sort((a,b)=>b.c-a.c||b.r-a.r);
-  // tuple: [cat, a, b, c, ...] higher better
-  if(isFlush && isStraight){
-    if(highStraight===12) return {name:'Royal Flush', tuple:[9,12]};
-    return {name:'Straight Flush', tuple:[8,highStraight]};
-  }
-  if(byCount[0].c===4) return {name:'Four of a Kind', tuple:[7,byCount[0].r, byCount[1].r]};
-  if(byCount[0].c===3 && byCount[1].c===2) return {name:'Full House', tuple:[6,byCount[0].r,byCount[1].r]};
-  if(isFlush){ const desc=[...ranks].sort((a,b)=>b-a); return {name:'Flush', tuple:[5,...desc]} }
-  if(isStraight) return {name:'Straight', tuple:[4,highStraight]};
-  if(byCount[0].c===3){ const kick=byCount.slice(1).map(x=>x.r).sort((a,b)=>b-a); return {name:'Three of a Kind', tuple:[3,byCount[0].r,...kick]} }
-  if(byCount[0].c===2 && byCount[1].c===2){
-    const hi=Math.max(byCount[0].r,byCount[1].r), lo=Math.min(byCount[0].r,byCount[1].r), k=byCount[2].r;
-    return {name:'Two Pair', tuple:[2,hi,lo,k]};
-  }
-  if(byCount[0].c===2){ const k=byCount.slice(1).map(x=>x.r).sort((a,b)=>b-a); return {name:'One Pair', tuple:[1,byCount[0].r,...k]} }
-  const desc=[...ranks].sort((a,b)=>b-a);
-  return {name:'High Card', tuple:[0,...desc]};
-}
-
-/* best of 7 -> evaluate */
-function evaluate7(cards7){
-  let best=null;
-  for(const c of kComb(cards7,5)){
-    const v=rank5(c);
-    if(!best || cmpTuple(v.tuple,best.tuple)>0) best=v;
-  }
-  return best;
-}
-
-/* =========================
-   Game state
-   ========================= */
-let state = null;
-
-function newState(){
-  return {
-    players: [], // {id,name,isBot,diff,stack,hand,folded,betThisRound,acted}
-    deck: [],
-    community: [],
-    pot: 0,
-    sb: 10,
-    bb: 20,
-    dealer: 0,
-    toAct: 0,
-    currentBet: 0,
-    street: 'idle', // preflop, flop, turn, river, showdown
-  };
-}
-
-/* =========================
-   UI helpers
-   ========================= */
-function $(id){ return document.getElementById(id); }
-function log(msg){ const d=document.createElement('div'); d.textContent=msg; $('log').prepend(d); }
-function cardSpan(card, hidden=false){
-  if(hidden) return `<span class="cardface back">##</span>`;
-  const s = suitOf(card), r = card.slice(0, card.length-1);
-  const red = (s==='♥'||s==='♦')?' red':'';
-  return `<span class="cardface${red}">${r}${s}</span>`;
-}
-function renderCommunity(){
-  $('community').innerHTML = state.community.map(c=>cardSpan(c)).join('');
-  $('pot').textContent = state.pot;
-}
-function renderSeats(){
-  const N = state.players.length;
-  const wrap = $('seats'); wrap.innerHTML='';
-  const boxW = $('table').clientWidth, boxH=$('table').clientHeight;
-  const cx = boxW/2, cy=boxH/2;
-  const rx = boxW*0.42, ry = boxH*0.38;
-
-  state.players.forEach((p,i)=>{
-    const ang = (i/N)*Math.PI*2 - Math.PI/2; // start top center
-    const x = cx + rx * Math.cos(ang);
-    const y = cy + ry * Math.sin(ang);
-    const seat = document.createElement('div');
-    seat.className='seat'+ (state.toAct===i?' active':'');
-    seat.style.left = x+'px'; seat.style.top = y+'px';
-    const dealer = (state.dealer===i)?'<span class="dealerBadge">D</span>':'';
-    const isHuman = !p.isBot;
-    const showCards = isHuman || state.street==='showdown';
-    seat.innerHTML = `
-      <div class="arrow"></div>
-      <div class="seatBox">
-        <div class="name">${p.name} ${dealer}</div>
-        <div class="stack">Stack: <span class="k">${p.stack}</span> | Bet: <span class="k">${p.betThisRound||0}</span></div>
-        <div class="cards hole">
-          ${p.hand.map((c,idx)=> cardSpan(c, !showCards)).join(' ')}
-        </div>
-        <div class="muted" style="font-size:12px">${p.folded?'(folded)':''}</div>
-      </div>`;
-    wrap.appendChild(seat);
-  });
-  $('toActText').textContent = state.players[state.toAct]? state.players[state.toAct].name : '—';
-}
-
-/* enable/disable human controls */
-function enableControls(flag){
-  $('btnFold').disabled = !flag;
-  $('btnCall').disabled = !flag;
-  $('btnRaise').disabled = !flag;
-  $('raiseAmt').disabled = !flag;
-}
-
-/* =========================
-   Dealing & streets
-   ========================= */
-function dealNewHand(){
-  state.deck = mkDeck(); shuffle(state.deck);
-  state.community = []; state.pot = 0; state.currentBet=0;
-  state.players.forEach(p=>{ p.hand=[]; p.folded=false; p.betThisRound=0; p.acted=false; });
-
-  // post blinds (SB = dealer+1, BB = dealer+2)
-  const sbPos = (state.dealer+1)%state.players.length;
-  const bbPos = (state.dealer+2)%state.players.length;
-  const sbAmt = Math.min(state.sb, state.players[sbPos].stack);
-  const bbAmt = Math.min(state.bb, state.players[bbPos].stack);
-  takeChips(state.players[sbPos], sbAmt); takeChips(state.players[bbPos], bbAmt);
-  state.currentBet = bbAmt;
-  log(`${state.players[sbPos].name} posts SB ${sbAmt}.`);
-  log(`${state.players[bbPos].name} posts BB ${bbAmt}.`);
-
-  // deal 2 each
-  for(let r=0;r<2;r++){ for(const p of state.players){ p.hand.push(state.deck.pop()); } }
-
-  // set action to first player after BB
-  state.toAct = (bbPos+1)%state.players.length;
-  state.street='preflop';
-  state.players.forEach(p=>p.acted=false);
-  renderCommunity(); renderSeats(); maybeRun();
-}
-function burn(){ state.deck.pop(); }
-function revealFlop(){
-  burn(); state.community.push(state.deck.pop(),state.deck.pop(),state.deck.pop());
-  state.street='flop'; state.currentBet=0; state.players.forEach(p=>{p.betThisRound=0;p.acted=false;});
-  log(`Flop: ${state.community.join(' ')}`);
-  advanceToFirstActiveAfterDealer(); renderCommunity(); renderSeats(); maybeRun();
-}
-function revealTurn(){
-  burn(); state.community.push(state.deck.pop());
-  state.street='turn'; state.currentBet=0; state.players.forEach(p=>{p.betThisRound=0;p.acted=false;});
-  log(`Turn: ${state.community.join(' ')}`);
-  advanceToFirstActiveAfterDealer(); renderCommunity(); renderSeats(); maybeRun();
-}
-function revealRiver(){
-  burn(); state.community.push(state.deck.pop());
-  state.street='river'; state.currentBet=0; state.players.forEach(p=>{p.betThisRound=0;p.acted=false;});
-  log(`River: ${state.community.join(' ')}`);
-  advanceToFirstActiveAfterDealer(); renderCommunity(); renderSeats(); maybeRun();
-}
-
-/* =========================
-   Betting flow
-   ========================= */
-function takeChips(p, amt){
-  const pay = Math.min(p.stack, amt);
-  p.stack -= pay; p.betThisRound = (p.betThisRound||0) + pay; state.pot += pay;
-}
-function toCallOf(p){ return Math.max(0, state.currentBet - (p.betThisRound||0)); }
-function activePlayers(){ return state.players.filter(p=>!p.folded && (p.stack>0 || (p.betThisRound||0)>=0)); }
-function everyoneActedAndEqualized(){
-  const actives = activePlayers();
-  if(actives.length<=1) return true;
-  if(actives.some(p=>!p.acted)) return false;
-  const bets = new Set(actives.map(p=>p.betThisRound||0));
-  return bets.size===1;
-}
-function advanceToFirstActiveAfterDealer(){
-  let i=(state.dealer+1)%state.players.length, tries=0;
-  while((state.players[i].folded || state.players[i].stack===0) && tries<state.players.length){ i=(i+1)%state.players.length; tries++; }
-  state.toAct = i;
-}
-function advanceToNext(){
-  let i=(state.toAct+1)%state.players.length, tries=0;
-  while((state.players[i].folded || (state.players[i].stack===0 && toCallOf(state.players[i])>0)) && tries<state.players.length){
-    i=(i+1)%state.players.length; tries++;
-  }
-  state.toAct = i;
-}
-function proceedStreetOrShowdown(){
-  // if only one remains -> wins pot
-  const actives = activePlayers();
-  if(actives.length===1){
-    const w = actives[0]; w.stack += state.pot; log(`${w.name} wins uncontested pot ${state.pot}.`);
-    state.pot=0; state.street='idle'; endHand(); return;
-  }
-  if(state.street==='preflop') return revealFlop();
-  if(state.street==='flop') return revealTurn();
-  if(state.street==='turn') return revealRiver();
-  if(state.street==='river') return showdown();
-}
-
-function showdown(){
-  state.street='showdown';
-  // evaluate
-  const contenders = state.players.filter(p=>!p.folded);
-  let best=null, winners=[];
-  for(const p of contenders){
-    const ev = evaluate7([...p.hand, ...state.community]);
-    if(!best || cmpTuple(ev.tuple, best.tuple)>0){ best=ev; winners=[p]; }
-    else if(cmpTuple(ev.tuple, best.tuple)===0){ winners.push(p); }
-  }
-  // show hands
-  contenders.forEach(p=> log(`${p.name} shows ${p.hand.join(' ')} → ${evaluate7([...p.hand, ...state.community]).name}`));
-  // split pot equally among winners (simplified)
-  const share = Math.floor(state.pot / winners.length);
-  winners.forEach(w=> w.stack += share);
-  log(`${winners.map(w=>w.name).join(', ')} win(s) ${share} each with ${best.name}.`);
-  state.pot=0;
-  renderCommunity(); renderSeats();
-  endHand();
-}
-function endHand(){
-  renderSeats();
-  state.dealer = (state.dealer+1)%state.players.length;
-  // auto-start next hand after a short pause if human has chips
-  const human = state.players.find(p=>!p.isBot);
-  if(!human || human.stack<=0){ log('Game over. (You are out of chips)'); return; }
-  setTimeout(()=> dealNewHand(), 1200);
-}
-
-/* =========================
-   Bot logic
-   ========================= */
-function strengthScore(p){
-  const ev = evaluate7([...p.hand, ...state.community]);
-  // compress tuple into rough numeric score
-  // category (0..9) dominates; add minor rank bits
-  let s = ev.tuple[0]*1e6;
-  for(let i=1;i<ev.tuple.length;i++){ s += ev.tuple[i]*Math.pow(100, (5-i)); }
-  return s;
-}
-function botAct(bot){
-  const callAmt = toCallOf(bot);
-  const diff = bot.diff || 'Medium';
-  const s = strengthScore(bot);
-  const streetFactor = ({preflop:0.9, flop:1.0, turn:1.05, river:1.1}[state.street]||1);
-  let action='call', amt=0;
-
-  if(diff==='Easy'){
-    const r=Math.random();
-    if(r<0.15 && bot.stack>callAmt+state.bb) { action='raise'; amt=Math.min(bot.stack, callAmt + state.bb); }
-    else if(r<0.7) { action='call'; amt=callAmt; }
-    else { action='fold'; }
-  } else if(diff==='Medium'){
-    if(s*streetFactor > 6.6e6 && bot.stack>callAmt+state.bb){ action='raise'; amt=Math.min(bot.stack, callAmt + Math.max(state.bb, Math.floor(state.pot*0.2))); }
-    else if(s*streetFactor > 4.2e6){ action='call'; amt=callAmt; }
-    else if(Math.random()<0.2){ action='call'; amt=callAmt; }
-    else action='fold';
-  } else { // Hard
-    const bluff = Math.random()<0.09;
-    if(bluff && bot.stack>callAmt+Math.floor(state.bb*2)){ action='raise'; amt=Math.min(bot.stack, callAmt + Math.floor(state.bb*2)); }
-    else if(s*streetFactor > 7.2e6 && bot.stack>callAmt+Math.floor(state.bb*2)){
-      action='raise'; amt=Math.min(bot.stack, callAmt + Math.max(Math.floor(state.bb*2), Math.floor(state.pot*0.35)));
-    } else if(s*streetFactor > 4.0e6){
-      action='call'; amt=callAmt;
-    } else {
-      if(callAmt===0 && Math.random()<0.4) { action='call'; amt=0; }
-      else if(callAmt<=Math.min(20, bot.stack) && Math.random()<0.3){ action='call'; amt=callAmt; }
-      else action='fold';
-    }
-  }
-
-  // Perform
-  if(action==='fold'){ bot.folded=true; log(`${bot.name} folds.`); bot.acted=true; }
-  else if(action==='call'){
-    const pay = Math.min(bot.stack, callAmt);
-    takeChips(bot, pay); log(`${bot.name} calls ${pay}.`); bot.acted=true;
-  } else if(action==='raise'){
-    const toCall = callAmt;
-    const raiseBy = Math.max(state.bb, amt - toCall);
-    const total = toCall + raiseBy;
-    const pay = Math.min(bot.stack, total);
-    takeChips(bot, pay);
-    state.currentBet = (bot.betThisRound||0);
-    // others must act again
-    state.players.forEach(p=>p.acted=(p===bot));
-    log(`${bot.name} raises to ${bot.betThisRound}.`);
-  }
-  renderSeats(); renderCommunity();
-}
-
-/* drive loop: if bot to act -> act; if human -> enable controls */
-function maybeRun(){
-  // skip folded / broke players that can't call
-  const actives = activePlayers();
-  if(actives.length<=1){ proceedStreetOrShowdown(); return; }
-
-  // if betting round is complete, move street
-  if(everyoneActedAndEqualized()){ proceedStreetOrShowdown(); return; }
-
-  const p = state.players[state.toAct];
-  renderSeats();
-  if(!p){ return; }
-
-  if(p.isBot || p.id!=='human'){
-    enableControls(false);
-    setTimeout(()=>{
-      if(!p.folded) botAct(p);
-      advanceToNext();
-      maybeRun();
-    }, 450 + Math.random()*400);
-  } else {
-    // human turn
-    enableControls(true);
-  }
-}
-
-/* =========================
-   Human actions
-   ========================= */
-function actFold(){
-  const me = state.players.find(p=>!p.isBot);
-  if(me.folded) return;
-  me.folded=true; me.acted=true;
-  log(`${me.name} folds.`);
-  enableControls(false);
-  advanceToNext(); maybeRun();
-}
-function actCall(){
-  const me = state.players.find(p=>!p.isBot);
-  const call = toCallOf(me);
-  const pay = Math.min(me.stack, call);
-  takeChips(me, pay); me.acted=true;
-  log(`${me.name} ${call===0?'checks':'calls '+pay}.`);
-  enableControls(false);
-  advanceToNext(); maybeRun();
-}
-function actRaise(){
-  const me = state.players.find(p=>!p.isBot);
-  const call = toCallOf(me);
-  let raiseBy = parseInt($('raiseAmt').value)||0;
-  if(raiseBy<=0){ alert('Enter raise amount'); return; }
-  const total = call + raiseBy;
-  const pay = Math.min(me.stack, total);
-  takeChips(me, pay);
-  state.currentBet = me.betThisRound;
-  state.players.forEach(p=>p.acted=(p===me));
-  log(`${me.name} raises to ${me.betThisRound}.`);
-  enableControls(false);
-  advanceToNext(); maybeRun();
-}
-
-/* =========================
-   Setup wiring
-   ========================= */
-function rebuildBotDiffs(){
-  const n = Math.max(1, Math.min(7, parseInt($('botCount').value)||1));
-  const box = $('botDiffs'); box.innerHTML='';
-  for(let i=0;i<n;i++){
-    const div = document.createElement('div');
-    div.style.marginTop='6px';
-    div.innerHTML = `<label>Bot ${i+1} difficulty</label>
+// ==== Menu Setup ====
+const botDiffDiv = document.getElementById('botDifficulties');
+document.getElementById('botCount').addEventListener('input', updateBotDiffs);
+function updateBotDiffs() {
+  const n = parseInt(document.getElementById('botCount').value);
+  botDiffDiv.innerHTML = '';
+  for(let i=1;i<=n;i++){
+    botDiffDiv.innerHTML += `Bot ${i} Difficulty: 
       <select id="botDiff${i}">
-        <option>Easy</option>
-        <option selected>Medium</option>
-        <option>Hard</option>
-      </select>`;
-    box.appendChild(div);
+        <option value="easy">Easy</option>
+        <option value="medium">Medium</option>
+        <option value="hard">Hard</option>
+      </select><br>`;
+  }
+}
+updateBotDiffs();
+
+// ==== Game Variables ====
+let canvas, ctx;
+let players = [];
+let communityCards = [];
+let currentPlayerIndex = 0;
+
+// ==== Start Game ====
+function startGame() {
+  const botCount = parseInt(document.getElementById('botCount').value);
+  const buyIn = parseInt(document.getElementById('buyIn').value);
+  const smallBlind = parseInt(document.getElementById('smallBlind').value);
+  const bigBlind = parseInt(document.getElementById('bigBlind').value);
+  
+  document.getElementById('menu').style.display = 'none';
+  canvas = document.getElementById('tableCanvas');
+  canvas.style.display = 'block';
+  ctx = canvas.getContext('2d');
+  
+  // Setup players
+  players = [{name:"You", chips:buyIn, isBot:false, cards:[]}];
+  for(let i=1;i<=botCount;i++){
+    const diff = document.getElementById(`botDiff${i}`).value;
+    players.push({name:`Bot ${i}`, chips:buyIn, isBot:true, cards:[], difficulty:diff});
+  }
+  
+  drawTable();
+  dealCards();
+  gameLoop();
+}
+
+// ==== Draw Table ====
+function drawTable(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // green felt
+  ctx.fillStyle="#0a5"; 
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  // oval table
+  ctx.beginPath();
+  ctx.ellipse(canvas.width/2, canvas.height/2, 400, 200, 0, 0, Math.PI*2);
+  ctx.fillStyle="#088"; ctx.fill();
+  // pot
+  ctx.fillStyle="white"; ctx.font="20px sans-serif";
+  ctx.fillText("Pot: 0", canvas.width/2 -30, canvas.height/2+5);
+  // your chips
+  ctx.fillText(players[0].name+" Chips: "+players[0].chips, canvas.width/2-40, canvas.height-30);
+  // bot chips
+  for(let i=1;i<players.length;i++){
+    ctx.fillText(players[i].name+" Chips: "+players[i].chips, 50 + i*150, 50);
+  }
+  // Turn marker
+  const turnPlayer = players[currentPlayerIndex];
+  ctx.fillStyle="yellow";
+  if(turnPlayer.isBot) ctx.fillText("→ "+turnPlayer.name+"'s turn", 50 + currentPlayerIndex*150, 30);
+  else ctx.fillText("→ Your turn!", canvas.width/2-40, canvas.height-50);
+}
+
+// ==== Deal Cards ====
+function dealCards(){
+  players.forEach(p=>{
+    p.cards = [
+      {rank:Math.floor(Math.random()*13)+2,suit:"♠"},
+      {rank:Math.floor(Math.random()*13)+2,suit:"♥"}
+    ];
+  });
+}
+
+// ==== Game Loop ====
+function gameLoop(){
+  const player = players[currentPlayerIndex];
+  drawTable();
+  if(player.isBot){
+    setTimeout(()=>{botAction(player);}, 500);
+  } else {
+    alert("Your turn! (placeholder)"); 
+    nextTurn();
   }
 }
 
-function startGame(){
-  const buy = Math.max(50, parseInt($('buyin').value)||1000);
-  const sb = Math.max(1, parseInt($('sb').value)||10);
-  const bb = Math.max(sb*2, parseInt($('bb').value)||20);
-  const bots = Math.max(1, Math.min(7, parseInt($('botCount').value)||4));
-  const pname = $('playerName').value.trim()||'You';
-
-  state = newState(); state.sb=sb; state.bb=bb;
-  state.players.push({id:'human', name:pname, isBot:false, diff:'Human', stack:buy, hand:[], folded:false, betThisRound:0, acted:false});
-  for(let i=0;i<bots;i++){
-    const sel = $('botDiff'+i); const diff = sel ? sel.value : 'Medium';
-    state.players.push({id:'bot'+(i+1), name:'Bot '+(i+1), isBot:true, diff, stack:buy, hand:[], folded:false, betThisRound:0, acted:false});
-  }
-  state.dealer = 0;
-  log(`Game started — Buy-in ${buy}, SB ${sb}, BB ${bb}, Bots ${bots}.`);
-  renderCommunity(); renderSeats();
-  dealNewHand();
+// ==== Next Turn ====
+function nextTurn(){
+  currentPlayerIndex = (currentPlayerIndex+1)%players.length;
+  gameLoop();
 }
 
-/* =========================
-   Hooks
-   ========================= */
-$('updateBots').onclick = rebuildBotDiffs;
-$('start').onclick = startGame;
-$('nextHand').onclick = ()=>{ if(state) { state.dealer = (state.dealer+1)%state.players.length; dealNewHand(); }};
-$('reset').onclick = ()=>{ state=null; $('seats').innerHTML=''; $('community').innerHTML=''; $('pot').textContent='0'; $('log').innerHTML=''; $('toActText').textContent='—'; };
-$('btnFold').onclick = actFold;
-$('btnCall').onclick = actCall;
-$('btnRaise').onclick = actRaise;
+// ==== Bot AI with Difficulty Tiers ====
+function evaluateHandStrength(player, communityCards) {
+  const cards = [...player.cards, ...communityCards];
+  let ranks = {};
+  for (let c of cards) ranks[c.rank] = (ranks[c.rank] || 0) + 1;
+  const pairs = Object.values(ranks).filter(v => v >= 2).length;
+  if (pairs >= 2) return 0.8;
+  if (pairs === 1) return 0.6;
+  return Math.random() * 0.4;
+}
 
-/* initialize */
-rebuildBotDiffs();
-renderCommunity(); // empty
+function botAction(bot){
+  const strength = evaluateHandStrength(bot, communityCards);
+  const rand = Math.random();
+  let action = "call";
+  if (bot.difficulty === "easy") {
+    if (rand < 0.7) action = "call";
+    else if (rand < 0.9) action = "fold";
+    else action = "raise";
+  } else if (bot.difficulty === "medium") {
+    if (rand < 0.5) action = "call";
+    else if (rand < 0.75) action = "raise";
+    else action = "fold";
+  } else if (bot.difficulty === "hard") {
+    if (strength > 0.7) action = "raise";
+    else if (strength > 0.4) action = (rand < 0.7) ? "call" : "raise";
+    else action = (rand < 0.3) ? "raise" : "fold";
+  }
+  doAction(bot, action);
+}
+
+// ==== doAction placeholder ====
+function doAction(bot, action){
+  console.log(bot.name + " does: " + action);
+  nextTurn();
+}
 </script>
+
 </body>
 </html>
