@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Texas Hold'em First-Person</title>
+<title>Texas Hold'em Web Edition 1 player</title>
 <style>
-  body { margin:0; background:#0a5; font-family:sans-serif; }
-  canvas { display:block; margin:0 auto; background:#0a5; }
+  body { margin:0; background:#064; font-family:sans-serif; color:white; }
+  canvas { display:block; margin:0 auto; background:#064; }
   #menu { text-align:center; padding:20px; color:white; }
   select, input { margin:5px; }
   button { margin-top:10px; padding:10px; }
+  #actions { text-align:center; display:none; }
+  #actions button { margin:5px; padding:10px; }
 </style>
 </head>
 <body>
@@ -23,7 +25,13 @@
   <button onclick="startGame()">Start Game</button>
 </div>
 
-<canvas id="tableCanvas" width="900" height="600" style="display:none;"></canvas>
+<div id="actions">
+  <button onclick="playerAction('fold')">Fold</button>
+  <button onclick="playerAction('call')">Call</button>
+  <button onclick="playerAction('raise')">Raise</button>
+</div>
+
+<canvas id="tableCanvas" width="1100" height="750" style="display:none;"></canvas>
 
 <script>
 // ==== Menu Setup ====
@@ -48,13 +56,17 @@ let canvas, ctx;
 let players = [];
 let communityCards = [];
 let currentPlayerIndex = 0;
+let pot = 0;
+let smallBlind = 10, bigBlind = 20;
+let roundPhase = "preflop"; // preflop, flop, turn, river, showdown
+let deck = [];
 
 // ==== Start Game ====
 function startGame() {
   const botCount = parseInt(document.getElementById('botCount').value);
   const buyIn = parseInt(document.getElementById('buyIn').value);
-  const smallBlind = parseInt(document.getElementById('smallBlind').value);
-  const bigBlind = parseInt(document.getElementById('bigBlind').value);
+  smallBlind = parseInt(document.getElementById('smallBlind').value);
+  bigBlind = parseInt(document.getElementById('bigBlind').value);
   
   document.getElementById('menu').style.display = 'none';
   canvas = document.getElementById('tableCanvas');
@@ -62,106 +74,186 @@ function startGame() {
   ctx = canvas.getContext('2d');
   
   // Setup players
-  players = [{name:"You", chips:buyIn, isBot:false, cards:[]}];
+  players = [{name:"You", chips:buyIn, isBot:false, cards:[], difficulty:"human", folded:false}];
   for(let i=1;i<=botCount;i++){
     const diff = document.getElementById(`botDiff${i}`).value;
-    players.push({name:`Bot ${i}`, chips:buyIn, isBot:true, cards:[], difficulty:diff});
+    players.push({name:`Bot ${i}`, chips:buyIn, isBot:true, cards:[], difficulty:diff, folded:false});
   }
   
+  startRound();
+}
+
+// ==== Deck + Deal ====
+const suits = ["♠","♥","♦","♣"];
+const ranks = {11:"J",12:"Q",13:"K",14:"A"};
+function makeDeck(){
+  let d = [];
+  for(let s of suits){
+    for(let r=2;r<=14;r++){
+      d.push({rank:r, suit:s});
+    }
+  }
+  return d;
+}
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+}
+function cardToString(card){
+  const rank = ranks[card.rank] || card.rank;
+  return rank + card.suit;
+}
+
+// ==== Round Start ====
+function startRound(){
+  deck = makeDeck();
+  shuffle(deck);
+  communityCards = [];
+  pot = 0;
+  roundPhase = "preflop";
+  currentPlayerIndex = 0;
+  players.forEach(p=>{
+    p.cards=[deck.pop(),deck.pop()];
+    p.folded=false;
+  });
   drawTable();
-  dealCards();
   gameLoop();
 }
 
 // ==== Draw Table ====
 function drawTable(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  // green felt
-  ctx.fillStyle="#0a5"; 
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  // oval table
+  // Table background
+  ctx.fillStyle="#3a2"; ctx.fillRect(0,0,canvas.width,canvas.height);
+  // Outer wood oval
   ctx.beginPath();
-  ctx.ellipse(canvas.width/2, canvas.height/2, 400, 200, 0, 0, Math.PI*2);
-  ctx.fillStyle="#088"; ctx.fill();
-  // pot
+  ctx.ellipse(canvas.width/2, canvas.height/2, 450, 270, 0, 0, Math.PI*2);
+  ctx.fillStyle="#6b4226"; ctx.fill();
+  // Inner green felt
+  ctx.beginPath();
+  ctx.ellipse(canvas.width/2, canvas.height/2, 420, 240, 0, 0, Math.PI*2);
+  ctx.fillStyle="#0a5"; ctx.fill();
+  
+  // Pot + community cards
   ctx.fillStyle="white"; ctx.font="20px sans-serif";
-  ctx.fillText("Pot: 0", canvas.width/2 -30, canvas.height/2+5);
-  // your chips
-  ctx.fillText(players[0].name+" Chips: "+players[0].chips, canvas.width/2-40, canvas.height-30);
-  // bot chips
-  for(let i=1;i<players.length;i++){
-    ctx.fillText(players[i].name+" Chips: "+players[i].chips, 50 + i*150, 50);
+  ctx.fillText("Pot: "+pot, canvas.width/2-40, canvas.height/2-10);
+  ctx.fillText("Phase: "+roundPhase, 20, 30);
+  
+  let comm = communityCards.map(cardToString).join("  ");
+  ctx.fillText("Board: "+comm, canvas.width/2-100, canvas.height/2+30);
+  
+  // Chairs
+  const seatCount = players.length;
+  const centerX = canvas.width/2;
+  const centerY = canvas.height/2;
+  const radius = 330;
+  for(let i=0;i<seatCount;i++){
+    let x, y;
+    if(i===0){ // Player bottom
+      x=centerX; y=centerY+radius;
+    } else {
+      const angle = Math.PI*(i/(seatCount-1));
+      x=centerX+Math.cos(angle-Math.PI/2)*radius;
+      y=centerY+Math.sin(angle-Math.PI/2)*radius;
+    }
+    // chair
+    ctx.beginPath();
+    ctx.arc(x,y,40,0,Math.PI*2);
+    ctx.fillStyle=(i===currentPlayerIndex)?"yellow":"black";
+    ctx.fill();
+    ctx.fillStyle="white"; ctx.font="14px sans-serif";
+    ctx.fillText(players[i].name, x-30,y);
+    ctx.fillText("Chips: "+players[i].chips, x-35,y+20);
+    if(i===0){
+      let hand=players[0].cards.map(cardToString).join("  ");
+      ctx.fillText("Your Hand: "+hand, x-50,y+60);
+    } else if(!players[i].folded){
+      ctx.fillText("🂠🂠", x-15, y+60);
+    }
   }
-  // Turn marker
-  const turnPlayer = players[currentPlayerIndex];
-  ctx.fillStyle="yellow";
-  if(turnPlayer.isBot) ctx.fillText("→ "+turnPlayer.name+"'s turn", 50 + currentPlayerIndex*150, 30);
-  else ctx.fillText("→ Your turn!", canvas.width/2-40, canvas.height-50);
-}
-
-// ==== Deal Cards ====
-function dealCards(){
-  players.forEach(p=>{
-    p.cards = [
-      {rank:Math.floor(Math.random()*13)+2,suit:"♠"},
-      {rank:Math.floor(Math.random()*13)+2,suit:"♥"}
-    ];
-  });
 }
 
 // ==== Game Loop ====
 function gameLoop(){
-  const player = players[currentPlayerIndex];
   drawTable();
+  let player=players[currentPlayerIndex];
+  if(player.folded){ nextTurn(); return; }
   if(player.isBot){
-    setTimeout(()=>{botAction(player);}, 500);
+    setTimeout(()=>botAction(player), 700);
   } else {
-    alert("Your turn! (placeholder)"); 
-    nextTurn();
+    document.getElementById("actions").style.display="block";
   }
 }
 
-// ==== Next Turn ====
 function nextTurn(){
-  currentPlayerIndex = (currentPlayerIndex+1)%players.length;
+  currentPlayerIndex=(currentPlayerIndex+1)%players.length;
+  if(roundPhase==="preflop" && currentPlayerIndex===0){
+    dealCommunity(3); roundPhase="flop";
+  } else if(roundPhase==="flop" && currentPlayerIndex===0){
+    dealCommunity(1); roundPhase="turn";
+  } else if(roundPhase==="turn" && currentPlayerIndex===0){
+    dealCommunity(1); roundPhase="river";
+  } else if(roundPhase==="river" && currentPlayerIndex===0){
+    roundPhase="showdown"; showdown();
+    return;
+  }
   gameLoop();
 }
 
-// ==== Bot AI with Difficulty Tiers ====
-function evaluateHandStrength(player, communityCards) {
-  const cards = [...player.cards, ...communityCards];
-  let ranks = {};
-  for (let c of cards) ranks[c.rank] = (ranks[c.rank] || 0) + 1;
-  const pairs = Object.values(ranks).filter(v => v >= 2).length;
-  if (pairs >= 2) return 0.8;
-  if (pairs === 1) return 0.6;
-  return Math.random() * 0.4;
+function dealCommunity(n){
+  for(let i=0;i<n;i++) communityCards.push(deck.pop());
 }
 
+// ==== Player Action ====
+function playerAction(action){
+  document.getElementById("actions").style.display="none";
+  doAction(players[0],action);
+}
+
+// ==== Bot AI ====
+function evaluateHandStrength(player){
+  const cards=[...player.cards,...communityCards];
+  let ranksCount={};
+  for(let c of cards) ranksCount[c.rank]=(ranksCount[c.rank]||0)+1;
+  const pairs=Object.values(ranksCount).filter(v=>v>=2).length;
+  if(pairs>=2) return 0.8;
+  if(pairs===1) return 0.6;
+  return Math.random()*0.4;
+}
 function botAction(bot){
-  const strength = evaluateHandStrength(bot, communityCards);
-  const rand = Math.random();
-  let action = "call";
-  if (bot.difficulty === "easy") {
-    if (rand < 0.7) action = "call";
-    else if (rand < 0.9) action = "fold";
-    else action = "raise";
-  } else if (bot.difficulty === "medium") {
-    if (rand < 0.5) action = "call";
-    else if (rand < 0.75) action = "raise";
-    else action = "fold";
-  } else if (bot.difficulty === "hard") {
-    if (strength > 0.7) action = "raise";
-    else if (strength > 0.4) action = (rand < 0.7) ? "call" : "raise";
-    else action = (rand < 0.3) ? "raise" : "fold";
+  const s=evaluateHandStrength(bot);
+  const r=Math.random();
+  let a="call";
+  if(bot.difficulty==="easy"){
+    if(r<0.7)a="call"; else if(r<0.9)a="fold"; else a="raise";
+  } else if(bot.difficulty==="medium"){
+    if(r<0.5)a="call"; else if(r<0.75)a="raise"; else a="fold";
+  } else {
+    if(s>0.7)a="raise";
+    else if(s>0.4)a=(r<0.7)?"call":"raise";
+    else a=(r<0.3)?"raise":"fold";
   }
-  doAction(bot, action);
+  doAction(bot,a);
 }
 
-// ==== doAction placeholder ====
-function doAction(bot, action){
-  console.log(bot.name + " does: " + action);
+// ==== Do Action ====
+function doAction(player,action){
+  console.log(player.name+" does "+action);
+  if(action==="fold") player.folded=true;
+  else if(action==="call") pot+=bigBlind;
+  else if(action==="raise"){ pot+=bigBlind*2; player.chips-=bigBlind*2; }
   nextTurn();
+}
+
+// ==== Showdown ====
+function showdown(){
+  drawTable();
+  let alive=players.filter(p=>!p.folded);
+  let winner=alive[Math.floor(Math.random()*alive.length)]; // placeholder random
+  ctx.fillStyle="white"; ctx.font="30px sans-serif";
+  ctx.fillText(winner.name+" wins the pot of "+pot+"!", canvas.width/2-150, canvas.height/2);
 }
 </script>
 
